@@ -1,0 +1,159 @@
+---
+title: "Exploring the United State NOAA storm database"
+output: html_document
+---
+##Introduction
+The project aims to explore the storm database of the US National Oceanic and Atmospheric Administration (NOAA).These data include some characteristics in terms of major storms and atmospheric phenomena that occur in the United States.Also the damages and severe consequences that occurred in terms of deaths, injuries and property damage.So in this project, we will focus on the reasons that have led to these types mentioned above.
+
+##Synopsis
+The events in the database start in the year 1950 and end in November 2011. In the earlier years of the database there are generally fewer events recorded, most likely due to a lack of good records. More recent years should be considered more complete.This analysis present which types of events are most harmful with respect to population health and which have the greatest economic consequences.
+
+##first Load required libraries
+```{r,warning=FALSE,message=FALSE}
+# set warning=FALSE and message=FALSE to stop seeing messages and warning
+library(readr)
+library(tidyr)
+library(magrittr)
+library(dplyr)
+library(ggplot2)
+library(gridExtra)
+```
+
+##loading Data
+Download it from internet first
+```{r,message=FALSE}
+link <- "http://d396qusza40orc.cloudfront.net/repdata%2Fdata%2FStormData.csv.bz2"
+download.file(url = link, destfile = "StormData")
+
+```
+Unzip Data and Read file as table format
+```{r}
+StormData <- read.csv(bzfile("StormData"),sep = ",",header=TRUE)
+```
+
+##Summary of Data
+look at the data
+```{r,results='markup'}
+summary(StormData)
+```
+
+##Data Processing
+At once we will prepare data for 2 questions
+```{r}
+#Select required variables only'effect of Events on health and economic' and drop the other.
+StormDataSelected<-StormData[,c("BGN_DATE","EVTYPE","FATALITIES","INJURIES","PROPDMG","PROPDMGEXP","CROPDMG","CROPDMGEXP")]
+#Subset Data '3columns ' that measures for Question 1
+Health_harmful<-subset(StormDataSelected,!StormDataSelected$FATALITIES == 0 & !StormDataSelected$INJURIES == 
+    0, select = c(EVTYPE, FATALITIES, INJURIES))
+#Subset Data '4columns ' that measures for Question 2
+Economic_harmful<-subset(StormDataSelected, !StormDataSelected$PROPDMG == 0 & !StormDataSelected$CROPDMG == 
+    0, select = c(EVTYPE, PROPDMG, PROPDMGEXP, CROPDMG, CROPDMGEXP))
+
+```
+
+##1-Across the United States, which types of events (as indicated in the EVTYPE variable) are most harmful with respect to population health?
+Data prpcessing 1.
+Now we will providing the required data to answer the question regarding the effect of events on health.
+```{r}
+#for fatalities 
+Health_harmful_death<-Health_harmful %>%
+        group_by(EVTYPE) %>%
+        summarise(FATALITIES_COUNT=sum(FATALITIES))%>%
+        arrange(desc(FATALITIES_COUNT))
+#select top 5 
+Health_harmful_death<-Health_harmful_death[1:5,]
+#for Injury
+Health_harmful_injur<-Health_harmful %>%
+        group_by(EVTYPE) %>%
+        summarise(INJURIES_COUNT=sum(INJURIES))%>%
+        arrange(desc(INJURIES_COUNT))
+#select top 5 
+Health_harmful_injur<-Health_harmful_injur[1:5,]
+        
+```
+
+##Result for first question
+plot the count of fatalities and injuries
+```{r}
+#use barplot from ggplot2 package
+#plot top 5 events causing fatalities
+Fatalities_plt<-ggplot(Health_harmful_death,
+                       aes(x=EVTYPE,y=FATALITIES_COUNT,fill=EVTYPE))+
+        geom_bar(stat = "identity",show.legend = FALSE)+
+        xlab("Harmful Events")+ylab("num of Deaths")+
+        ggtitle("Top 5 Events Causing Fatalities")+
+        theme(axis.text.x = element_text(angle = 30))
+#plot top 5 events causing Injuries
+Injury_plt<-ggplot(Health_harmful_injur,
+                   aes(x=EVTYPE,y=INJURIES_COUNT,fill=EVTYPE))+
+        geom_bar(stat="identity",show.legend = FALSE)+
+        xlab("Haemfull Events")+ylab("num of Injuries")+
+        ggtitle("Top 5 Events Causing Injuries")+
+        theme(axis.text.x = element_text(angle = 30))
+#from "gridExtra" package we can divide two plots into 2col
+grid.arrange(Fatalities_plt, Injury_plt, ncol = 2)
+
+```
+
+## 2-Across the United States, which types of events have the greatest economic consequences?
+Data prpcessing 2.
+Now we will providing the required data to answer the question regarding the effect of events on Economic.
+
+```{r}
+#to see count of each PROPDMGEXP and CROPDMGEXP levels 
+table(Economic_harmful$PROPDMGEXP)
+table(Economic_harmful$CROPDMGEXP)
+```
+
+```{r,results="hide"}
+#we hidding the result of data is being too big
+#select only levels required (K,k,M,m,B)
+selected<-c("K","k","M","m","B")
+Economic_harmful[Economic_harmful$PROPDMGEXP %in% selected,]
+Economic_harmful[Economic_harmful$CROPDMGEXP %in% selected,]
+
+
+#we convert Values to numeric 
+#first replace pattern by numeric values by using gsub() function
+Economic_harmful$PROPDMGEXP <- gsub("m", 1e+06, Economic_harmful$PROPDMGEXP, ignore.case = TRUE)
+Economic_harmful$PROPDMGEXP <- gsub("k", 1000, Economic_harmful$PROPDMGEXP, ignore.case = TRUE)
+Economic_harmful$PROPDMGEXP <- gsub("b", 1e+09, Economic_harmful$PROPDMGEXP, ignore.case = TRUE)
+Economic_harmful$PROPDMGEXP <- as.numeric(Economic_harmful$PROPDMGEXP)
+Economic_harmful$CROPDMGEXP <- gsub("m", 1e+06, Economic_harmful$CROPDMGEXP, ignore.case = TRUE)
+Economic_harmful$CROPDMGEXP <- gsub("k", 1000, Economic_harmful$CROPDMGEXP, ignore.case = TRUE)
+Economic_harmful$CROPDMGEXP <- gsub("b", 1e+09, Economic_harmful$CROPDMGEXP, ignore.case = TRUE)
+#second convert them into numeric
+Economic_harmful$CROPDMGEXP <- as.numeric(Economic_harmful$CROPDMGEXP)
+Economic_harmful$PROPDMGEXP <- as.numeric(Economic_harmful$PROPDMGEXP)
+#mutat column that contain the total damages
+Economic_harmful$SumDam<-(Economic_harmful$PROPDMG * Economic_harmful$PROPDMGEXP)+
+        (Economic_harmful$CROPDMG * Economic_harmful$CROPDMGEXP)
+#third count total damges by each event
+Economic_harmful<-Economic_harmful %>%
+        group_by(EVTYPE) %>%
+        summarise(TotalDMG=sum(SumDam))%>%
+        arrange(desc(TotalDMG))
+#select Top 5 only
+Economic_harmful<-Economic_harmful[1:5,]
+
+```
+
+##Result for Second question
+plot the count of Damages
+```{r}
+ggplot(Economic_harmful,
+                           aes(x=EVTYPE,y=TotalDMG,fill=EVTYPE))+
+        geom_bar(stat = "identity",show.legend = FALSE)+
+        xlab("Harmfull Events")+
+        ylab("sum of damages")+
+        ggtitle("Top 5 Events Causing Economics Damages")
+```
+
+##Conclusion
+After we make some analysis for this data to answer for both question ,we can found that the Tornado most harmfull affected to the population health , and the Flood have the greatest economic consequences.
+
+
+
+
+
+
